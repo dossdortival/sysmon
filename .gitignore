@@ -1,0 +1,9 @@
+# Ignore compiled binaries
+sysmon
+*.o
+
+# Ignore backup or temp files
+*.swp
+*.swo
+*.bak
+*.tmp
