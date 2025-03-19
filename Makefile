@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -g
 LDFLAGS = -lncurses
 
-SRC = src/main.c src/ui.c src/system_stats.c
+SRC = src/main.c src/ui.c src/system_stats.c src/process.c
 OBJ = $(SRC:.c=.o)
 
 all: sysmon
@@ -10,7 +10,7 @@ all: sysmon
 sysmon: $(OBJ)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-%.o: %.c
+src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
