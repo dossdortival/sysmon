@@ -4,270 +4,341 @@
  * ui_manager.c - User interface management implementation
  */
 
- #include <ncurses.h>
- #include <string.h>
- #include <stdlib.h>
- #include <signal.h>
- #include <unistd.h> 
- 
- #include "ui_manager.h"
- #include "../util/error_handler.h"
- 
- // Windows for different sections
- static WINDOW *header_win = NULL;
- static WINDOW *cpu_win = NULL;
- static WINDOW *memory_win = NULL;
- static WINDOW *footer_win = NULL;
- 
- // Screen dimensions
- static int max_y, max_x;
- 
- // Display attributes
- static int attr_header;
- static int attr_normal;
- static int attr_highlight;
- static int attr_bar_high;
- static int attr_bar_med;
- static int attr_bar_low;
- 
- // Create a horizontal bar
- static void draw_bar(WINDOW *win, int y, int x, int width, double percent, int attr) {
-     int bar_width = (int)(width * percent / 100.0);
-     
-     for (int i = 0; i < width; i++) {
-         if (i < bar_width) {
-             wattron(win, attr);
-             mvwaddch(win, y, x + i, ' ');
-             wattroff(win, attr);
-         } else {
-             mvwaddch(win, y, x + i, ' ');
-         }
-     }
- }
- 
- bool ui_init(void) {
-     // Initialize ncurses
-     initscr();
-     cbreak();
-     noecho();
-     keypad(stdscr, TRUE);
-     curs_set(0);
-     timeout(100); // 100ms timeout for getch()
-     
-     // Check if terminal supports colors
-     if (has_colors() == FALSE) {
-         endwin();
-         log_error("Terminal does not support colors");
-         return false;
-     }
-     
-     // Initialize colors
-     start_color();
-     init_pair(1, COLOR_WHITE, COLOR_BLUE);     // Header
-     init_pair(2, COLOR_WHITE, COLOR_BLACK);    // Normal text
-     init_pair(3, COLOR_BLACK, COLOR_WHITE);    // Highlighted text
-     init_pair(4, COLOR_WHITE, COLOR_RED);      // High usage bar
-     init_pair(5, COLOR_WHITE, COLOR_YELLOW);   // Medium usage bar
-     init_pair(6, COLOR_WHITE, COLOR_GREEN);    // Low usage bar
-     
-     // Set up color attributes
-     attr_header = COLOR_PAIR(1);
-     attr_normal = COLOR_PAIR(2);
-     attr_highlight = COLOR_PAIR(3);
-     attr_bar_high = COLOR_PAIR(4);
-     attr_bar_med = COLOR_PAIR(5);
-     attr_bar_low = COLOR_PAIR(6);
-     
-     // Get screen dimensions
-     getmaxyx(stdscr, max_y, max_x);
-     
-     // Create windows
-     header_win = newwin(3, max_x, 0, 0);
-     cpu_win = newwin(7, max_x, 3, 0);
-     memory_win = newwin(7, max_x, 10, 0);
-     footer_win = newwin(3, max_x, max_y - 3, 0);
-     
-     // Check if windows were created successfully
-     if (!header_win || !cpu_win || !memory_win || !footer_win) {
-         ui_cleanup();
-         log_error("Failed to create ncurses windows");
-         return false;
-     }
-     
-     // Draw initial header
-     wattron(header_win, attr_header);
-     for (int i = 0; i < max_x; i++) {
-         mvwaddch(header_win, 0, i, ' ');
-         mvwaddch(header_win, 1, i, ' ');
-         mvwaddch(header_win, 2, i, ' ');
-     }
-     mvwprintw(header_win, 1, (max_x - 15) / 2, "sysmon v%s", SYSMON_VERSION);
-     wattroff(header_win, attr_header);
-     
-     // Draw initial footer
-     wattron(footer_win, attr_header);
-     for (int i = 0; i < max_x; i++) {
-         mvwaddch(footer_win, 0, i, ' ');
-         mvwaddch(footer_win, 1, i, ' ');
-         mvwaddch(footer_win, 2, i, ' ');
-     }
-     mvwprintw(footer_win, 1, 2, "q: Quit");
-     wattroff(footer_win, attr_header);
-     
-     // Draw initial CPU window
-     box(cpu_win, 0, 0);
-     mvwprintw(cpu_win, 0, 2, " CPU Usage ");
-     
-     // Draw initial Memory window
-     box(memory_win, 0, 0);
-     mvwprintw(memory_win, 0, 2, " Memory Usage ");
-     
-     // Refresh all windows
-     refresh();
-     wrefresh(header_win);
-     wrefresh(cpu_win);
-     wrefresh(memory_win);
-     wrefresh(footer_win);
-     
-     return true;
- }
- 
- void ui_update_cpu(const cpu_data *data) {
-     if (!data || !cpu_win) return;
-     
-     // Clear CPU window content
-     werase(cpu_win);
-     box(cpu_win, 0, 0);
-     mvwprintw(cpu_win, 0, 2, " CPU Usage ");
-     
-     // Display total CPU usage
-     mvwprintw(cpu_win, 1, 2, "Total: %5.1f%%", data->total_usage);
-     
-     // Determine color based on usage
-     int bar_attr;
-     if (data->total_usage >= 80.0) {
-         bar_attr = attr_bar_high;
-     } else if (data->total_usage >= 50.0) {
-         bar_attr = attr_bar_med;
-     } else {
-         bar_attr = attr_bar_low;
-     }
-     
-     // Draw total CPU usage bar
-     draw_bar(cpu_win, 2, 2, max_x - 4, data->total_usage, bar_attr);
-     
-     // Display per-core usage
-     int cores_per_row = 4;
-     int core_width = (max_x - 4) / cores_per_row;
-     
-     for (int i = 0; i < data->num_cores; i++) {
-         int row = i / cores_per_row;
-         int col = i % cores_per_row;
-         int x_pos = 2 + col * core_width;
-         
-         if (row > 3) break; // Limit to 4 rows of cores
-         
-         // Determine color based on core usage
-         if (data->core_usage[i] >= 80.0) {
-             bar_attr = attr_bar_high;
-         } else if (data->core_usage[i] >= 50.0) {
-             bar_attr = attr_bar_med;
-         } else {
-             bar_attr = attr_bar_low;
-         }
-         
-         // Draw core label and percentage
-         mvwprintw(cpu_win, 3 + row, x_pos, "CPU%d: %5.1f%%", i, data->core_usage[i]);
-         
-         // Draw core usage bar
-         draw_bar(cpu_win, 3 + row, x_pos + 12, core_width - 13, data->core_usage[i], bar_attr);
-     }
- }
- 
- void ui_update_memory(const memory_data *data) {
-     if (!data || !memory_win) return;
-     
-     // Convert to MB for display
-     double total_mb = data->total / 1024.0;
-     double used_mb = data->used / 1024.0;
-     double free_mb = data->free / 1024.0;
-     double buffers_mb = data->buffers / 1024.0;
-     double cached_mb = data->cached / 1024.0;
-     double swap_total_mb = data->swap_total / 1024.0;
-     double swap_used_mb = data->swap_used / 1024.0;
-     
-     // Clear Memory window content
-     werase(memory_win);
-     box(memory_win, 0, 0);
-     mvwprintw(memory_win, 0, 2, " Memory Usage ");
-     
-     // Display memory information
-     mvwprintw(memory_win, 1, 2, "Memory: %.1f MB / %.1f MB (%.1f%%)", 
-               used_mb, total_mb, data->usage_percent);
-     
-     // Determine color based on usage
-     int bar_attr;
-     if (data->usage_percent >= 80.0) {
-         bar_attr = attr_bar_high;
-     } else if (data->usage_percent >= 50.0) {
-         bar_attr = attr_bar_med;
-     } else {
-         bar_attr = attr_bar_low;
-     }
-     
-     // Draw memory usage bar
-     draw_bar(memory_win, 2, 2, max_x - 4, data->usage_percent, bar_attr);
-     
-     // Display memory details
-     mvwprintw(memory_win, 3, 2, "Free: %.1f MB   Buffers: %.1f MB   Cached: %.1f MB", 
-               free_mb, buffers_mb, cached_mb);
-     
-     // Display swap information
-     mvwprintw(memory_win, 5, 2, "Swap: %.1f MB / %.1f MB (%.1f%%)",
-               swap_used_mb, swap_total_mb, data->swap_usage_percent);
-     
-     // Determine color for swap bar
-     if (data->swap_usage_percent >= 80.0) {
-         bar_attr = attr_bar_high;
-     } else if (data->swap_usage_percent >= 50.0) {
-         bar_attr = attr_bar_med;
-     } else {
-         bar_attr = attr_bar_low;
-     }
-     
-     // Draw swap usage bar
-     draw_bar(memory_win, 6, 2, max_x - 4, data->swap_usage_percent, bar_attr);
- }
- 
- void ui_handle_input(void) {
-     int ch = getch();
-     
-     switch (ch) {
-         case 'q':
-         case 'Q':
-             // Set global flag to terminate (handled in main.c)
-             kill(getpid(), SIGTERM);
-             break;
-             
-         // Add more keyboard shortcuts as needed
-     }
- }
- 
- void ui_refresh(void) {
-     // Refresh all windows
-     wrefresh(header_win);
-     wrefresh(cpu_win);
-     wrefresh(memory_win);
-     wrefresh(footer_win);
- }
- 
- void ui_cleanup(void) {
-     // Clean up ncurses windows
-     if (header_win) delwin(header_win);
-     if (cpu_win) delwin(cpu_win);
-     if (memory_win) delwin(memory_win);
-     if (footer_win) delwin(footer_win);
-     
-     // End ncurses
-     endwin();
- }
+#include <ncurses.h>
+#include <string.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h> 
+
+#include "ui_manager.h"
+#include "../util/error_handler.h"
+
+// Window layout configuration
+typedef struct {
+    WINDOW *win;
+    int height;
+    int y_pos;
+} window_layout_t;
+
+// UI color attributes
+typedef struct {
+    int header;
+    int normal;
+    int highlight;
+    int bar_high;
+    int bar_medium;
+    int bar_low;
+} ui_attributes_t;
+
+// UI component dimensions
+typedef struct {
+    int max_y;
+    int max_x;
+    int bar_width;
+    int cores_per_row;
+} ui_dimensions_t;
+
+// Static UI state
+static struct {
+    window_layout_t header;
+    window_layout_t cpu;
+    window_layout_t memory;
+    window_layout_t network;
+    window_layout_t disk;
+    window_layout_t processes;
+    window_layout_t footer;
+    ui_attributes_t attr;
+    ui_dimensions_t dim;
+} ui;
+
+// Draw a horizontal progress bar
+static void draw_progress_bar(WINDOW *win, int y, int x, double percent, int attr) 
+{
+    int fill_width = (int)(ui.dim.bar_width * percent / 100.0);
+    fill_width = (fill_width > ui.dim.bar_width) ? ui.dim.bar_width : fill_width;
+
+    wattron(win, attr);
+    for (int i = 0; i < fill_width; i++) {
+        mvwaddch(win, y, x + i, ' ');
+    }
+    wattroff(win, attr);
+}
+
+// Get color attribute based on usage percentage
+static int get_usage_color(double percent) 
+{
+    if (percent >= 80.0) return ui.attr.bar_high;
+    if (percent >= 50.0) return ui.attr.bar_medium;
+    return ui.attr.bar_low;
+}
+
+// Initialize color attributes
+static bool init_colors(void) 
+{
+    if (!has_colors()) {
+        log_error("Terminal does not support colors");
+        return false;
+    }
+
+    start_color();
+    use_default_colors();
+
+    init_pair(1, COLOR_WHITE, COLOR_BLUE);    // Header/footer
+    init_pair(2, COLOR_WHITE, COLOR_BLACK);   // Normal text
+    init_pair(3, COLOR_BLACK, COLOR_WHITE);   // Highlighted text
+    init_pair(4, COLOR_WHITE, COLOR_RED);     // High usage
+    init_pair(5, COLOR_WHITE, COLOR_YELLOW);  // Medium usage
+    init_pair(6, COLOR_WHITE, COLOR_GREEN);   // Low usage
+
+    ui.attr.header = COLOR_PAIR(1);
+    ui.attr.normal = COLOR_PAIR(2);
+    ui.attr.highlight = COLOR_PAIR(3);
+    ui.attr.bar_high = COLOR_PAIR(4);
+    ui.attr.bar_medium = COLOR_PAIR(5);
+    ui.attr.bar_low = COLOR_PAIR(6);
+
+    return true;
+}
+
+// Create and initialize a window
+static bool init_window(window_layout_t *win, int height, int y_pos, const char *title) 
+{
+    win->height = height;
+    win->y_pos = y_pos;
+    win->win = newwin(height, ui.dim.max_x, y_pos, 0);
+
+    if (!win->win) {
+        log_error("Failed to create window");
+        return false;
+    }
+
+    box(win->win, 0, 0);
+    if (title) {
+        mvwprintw(win->win, 0, 2, " %s ", title);
+    }
+    return true;
+}
+
+// Initialize the UI system
+bool ui_init(void) 
+{
+    // Initialize ncurses
+    initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+    curs_set(0);
+    timeout(100);  // 100ms input timeout
+
+    if (!init_colors()) {
+        endwin();
+        return false;
+    }
+
+    // Get screen dimensions
+    getmaxyx(stdscr, ui.dim.max_y, ui.dim.max_x);
+    ui.dim.bar_width = ui.dim.max_x - 4;
+    ui.dim.cores_per_row = 4;
+
+    // Initialize windows
+    if (!init_window(&ui.header, 3, 0, NULL) ||
+        !init_window(&ui.cpu, 7, 3, "CPU Usage") ||
+        !init_window(&ui.memory, 7, 10, "Memory Usage") ||
+        !init_window(&ui.network, 7, 17, "Network Activity") ||
+        !init_window(&ui.disk, 7, 24, "Disk I/O") ||
+        !init_window(&ui.processes, ui.dim.max_y - 13, 31, "Processes") || 
+        !init_window(&ui.footer, 3, ui.dim.max_y - 3, NULL)) {
+        ui_cleanup();
+        return false;
+    }
+
+    // Draw header
+    wattron(ui.header.win, ui.attr.header);
+    mvwprintw(ui.header.win, 1, (ui.dim.max_x - 15) / 2, "sysmon v%s", SYSMON_VERSION);
+    wattroff(ui.header.win, ui.attr.header);
+
+    // Draw footer
+    wattron(ui.footer.win, ui.attr.header);
+    mvwprintw(ui.footer.win, 1, 2, "q: Quit");
+    wattroff(ui.footer.win, ui.attr.header);
+
+    ui_refresh();
+    return true;
+}
+
+// Update CPU metrics display
+void ui_update_cpu(const cpu_metrics_t *metrics) 
+{
+    if (!metrics || !ui.cpu.win) return;
+
+    werase(ui.cpu.win);
+    box(ui.cpu.win, 0, 0);
+    mvwprintw(ui.cpu.win, 0, 2, " CPU Usage ");
+
+    // Display total CPU usage
+    mvwprintw(ui.cpu.win, 1, 2, "Total: %5.1f%%", metrics->total_usage);
+    draw_progress_bar(ui.cpu.win, 2, 2, metrics->total_usage, 
+                     get_usage_color(metrics->total_usage));
+
+    // Display per-core usage
+    int core_width = ui.dim.bar_width / ui.dim.cores_per_row;
+    for (int i = 0; i < metrics->num_cores && i < MAX_CPU_CORES; i++) {
+        int row = i / ui.dim.cores_per_row;
+        int col = i % ui.dim.cores_per_row;
+        int x_pos = 2 + col * core_width;
+
+        if (row > 3) break;  // Limit to 4 rows
+
+        mvwprintw(ui.cpu.win, 3 + row, x_pos, "CPU%d: %5.1f%%", 
+                 i, metrics->core_usage[i]);
+        draw_progress_bar(ui.cpu.win, 3 + row, x_pos + 12, metrics->core_usage[i],
+                         get_usage_color(metrics->core_usage[i]));
+    }
+}
+
+// Update memory metrics display
+void ui_update_memory(const memory_metrics_t *metrics) 
+{
+    if (!metrics || !ui.memory.win) return;
+
+    werase(ui.memory.win);
+    box(ui.memory.win, 0, 0);
+    mvwprintw(ui.memory.win, 0, 2, " Memory Usage ");
+
+    // Convert to MB for display
+    double total_mb = metrics->total / 1024.0;
+    double used_mb = metrics->used / 1024.0;
+
+    // Display memory usage
+    mvwprintw(ui.memory.win, 1, 2, "Memory: %.1f MB / %.1f MB (%.1f%%)", 
+             used_mb, total_mb, metrics->usage_percent);
+    draw_progress_bar(ui.memory.win, 2, 2, metrics->usage_percent,
+                     get_usage_color(metrics->usage_percent));
+
+    // Display memory details
+    mvwprintw(ui.memory.win, 3, 2, "Free: %.1f MB   Buffers: %.1f MB   Cached: %.1f MB",
+             metrics->free / 1024.0, metrics->buffers / 1024.0, metrics->cached / 1024.0);
+
+    // Display swap usage
+    double swap_total_mb = metrics->swap_total / 1024.0;
+    double swap_used_mb = metrics->swap_used / 1024.0;
+
+    mvwprintw(ui.memory.win, 5, 2, "Swap: %.1f MB / %.1f MB (%.1f%%)",
+             swap_used_mb, swap_total_mb, metrics->swap_usage_percent);
+    draw_progress_bar(ui.memory.win, 6, 2, metrics->swap_usage_percent,
+                     get_usage_color(metrics->swap_usage_percent));
+}
+
+// Update network metrics display
+void ui_update_network(const network_metrics_t *metrics) 
+{
+    if (!metrics || !ui.network.win) return;
+
+    werase(ui.network.win);
+    box(ui.network.win, 0, 0);
+    mvwprintw(ui.network.win, 0, 2, " Network Usage ");
+
+    // Display primary interface stats
+    mvwprintw(ui.network.win, 1, 2, "Interface: %s", metrics->interface);
+    
+    // Display transfer rates in KB/s
+    mvwprintw(ui.network.win, 2, 2, "Download: %.1f KB/s", metrics->rx_rate);
+    draw_progress_bar(ui.network.win, 3, 2, 
+                     metrics->rx_utilization,
+                     get_usage_color(metrics->rx_utilization));
+    
+    mvwprintw(ui.network.win, 4, 2, "Upload: %.1f KB/s", metrics->tx_rate);
+    draw_progress_bar(ui.network.win, 5, 2, 
+                     metrics->tx_utilization,
+                     get_usage_color(metrics->tx_utilization));
+
+    // Display total transfers in MB
+    mvwprintw(ui.network.win, 6, 2, "Total: ↓%.1f MB ↑%.1f MB", 
+             metrics->total_rx / 1024.0, 
+             metrics->total_tx / 1024.0);
+
+}
+
+// Update disk metrics display
+void ui_update_disk(const disk_metrics_t *metrics)
+{
+    if (!metrics || !ui.disk.win) return;
+
+    werase(ui.disk.win);
+    box(ui.disk.win, 0, 0);
+    mvwprintw(ui.disk.win, 0, 2, " Disk I/O ");
+
+    // Display read stats
+    mvwprintw(ui.disk.win, 1, 2, "Read: %6.1f KB/s", metrics->read_rate);
+    draw_progress_bar(ui.disk.win, 2, 2, 
+                    metrics->read_rate / 10.0,  // Scale to 1000KB/s = 100%
+                    get_usage_color(metrics->read_rate / 10.0));
+
+    // Display write stats
+    mvwprintw(ui.disk.win, 3, 2, "Write: %6.1f KB/s", metrics->write_rate);
+    draw_progress_bar(ui.disk.win, 4, 2,
+                    metrics->write_rate / 10.0,  // Scale to 1000KB/s = 100%
+                    get_usage_color(metrics->write_rate / 10.0));
+
+    // Display totals
+    mvwprintw(ui.disk.win, 5, 2, "Total Read: %.1f MB", metrics->total_read / 1024.0);
+    mvwprintw(ui.disk.win, 6, 2, "Total Written: %.1f MB", metrics->total_written / 1024.0);
+}
+
+// Update process metrics display
+void ui_update_processes(const process_metrics_t *metrics)
+{
+    if (!metrics || !ui.processes.win) return;
+
+    werase(ui.processes.win);
+    box(ui.processes.win, 0, 0);
+    mvwprintw(ui.processes.win, 0, 2, " Processes ");
+
+    // Display process list
+    for (int i = 0; i < metrics->count && i < ui.dim.max_y - 14; i++) {
+        mvwprintw(ui.processes.win, i + 1, 2, "%5d %5.1f%% %5.1f%% %s",
+                 metrics->processes[i].pid,
+                 metrics->processes[i].cpu_usage,
+                 metrics->processes[i].mem_usage,
+                 metrics->processes[i].name);
+    }
+
+    // Display process count
+    mvwprintw(ui.processes.win, ui.dim.max_y - 13, 2, "Processes: %d", metrics->count);
+}
+
+
+// Handle user input
+void ui_handle_input(void) 
+{
+    int ch = getch();
+    if (ch == 'q' || ch == 'Q') {
+        kill(getpid(), SIGTERM);
+    }
+}
+
+// Refresh the display
+void ui_refresh(void) 
+{
+    wrefresh(ui.header.win);
+    wrefresh(ui.cpu.win);
+    wrefresh(ui.memory.win);
+    wrefresh(ui.network.win);
+    wrefresh(ui.disk.win);
+    wrefresh(ui.processes.win);
+    wrefresh(ui.footer.win);
+    refresh();
+}
+
+// Clean up UI resources
+void ui_cleanup(void) 
+{
+    if (ui.header.win) delwin(ui.header.win);
+    if (ui.cpu.win) delwin(ui.cpu.win);
+    if (ui.memory.win) delwin(ui.memory.win);
+    if (ui.network.win) delwin(ui.network.win);
+    if (ui.disk.win) delwin(ui.disk.win);
+    if (ui.processes.win) delwin(ui.processes.win);
+    if (ui.footer.win) delwin(ui.footer.win);
+    endwin();
+}
