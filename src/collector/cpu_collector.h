@@ -10,7 +10,7 @@
 #include "../include/sysmon.h"
 
 // Maximum number of CPU cores we support tracking
-#define MAX_CPU_CORES 32
+#define MAX_CPU_CORES 64
 
 // Structure to hold CPU usage data
 typedef struct {

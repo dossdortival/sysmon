@@ -28,6 +28,7 @@ typedef struct {
  
 static interface_prev_t *prev_stats = NULL;
 static int num_interfaces = 0;
+static double max_bandwidth_kb = 100000.0; // Default 100MB/s (To adjust as needed)
  
 bool network_collector_init(void) {
     // Count number of network interfaces
@@ -67,12 +68,12 @@ bool network_collector_init(void) {
     }
 
     // Get initial readings
-    network_stats_t dummy;
-    return network_collector_collect(&dummy, 1);
+    network_metrics_t dummy;
+    return network_collector_collect(&dummy);
 }
  
-bool network_collector_collect(network_stats_t *stats, int max_interfaces) {
-    if (!stats || max_interfaces <= 0) {
+bool network_collector_collect(network_metrics_t *metrics) {
+    if (!metrics) {
         log_error("Invalid arguments");
         return false;
     }
@@ -94,17 +95,23 @@ bool network_collector_collect(network_stats_t *stats, int max_interfaces) {
     }
 
     time_t now = time(NULL);
+    metrics->total_rx = 0;
+    metrics->total_tx = 0;
     int interface_count = 0;
 
-    while (fgets(line, sizeof(line), file) && interface_count < max_interfaces) {
+    while (fgets(line, sizeof(line), file)) {
         char *colon = strchr(line, ':');
         if (!colon) continue;
 
         // Extract interface name
         char iface[MAX_INTERFACE_NAME];
         strncpy(iface, line, colon - line);
-        iface[colon - line] = '\0';
-        strcpy(stats[interface_count].interface, iface);
+        iface[colon - line] = '\0'; 
+
+        // skip loopback interface
+        if (strcmp(iface, "lo") == 0) {
+            continue;
+        }
 
         // Parse statistics
         unsigned long rx_bytes, tx_bytes;
@@ -115,26 +122,33 @@ bool network_collector_collect(network_stats_t *stats, int max_interfaces) {
         }
 
         // Calculate rates
+        double rx_rate = 0.0;
+        double tx_rate = 0.0;
+
         if (prev_stats[interface_count].last_update > 0) {
             double time_diff = difftime(now, prev_stats[interface_count].last_update);
             if (time_diff > 0) {
-                stats[interface_count].rx_rate = 
-                    (rx_bytes - prev_stats[interface_count].rx_bytes) / 
-                    (time_diff * 1024);  // Convert to KB/s
-                stats[interface_count].tx_rate = 
-                    (tx_bytes - prev_stats[interface_count].tx_bytes) / 
-                    (time_diff * 1024);  // Convert to KB/s
+                rx_rate = (rx_bytes - prev_stats[interface_count].rx_bytes) / (time_diff * 1024);
+                tx_rate = (tx_bytes - prev_stats[interface_count].tx_bytes) / (time_diff * 1024);
             }
         }
 
         // Store current values
-        stats[interface_count].rx_bytes = rx_bytes;
-        stats[interface_count].tx_bytes = tx_bytes;
+        // Store current values
+        strncpy(metrics->interface, iface, MAX_INTERFACE_NAME);
+        metrics->rx_rate = rx_rate;
+        metrics->tx_rate = tx_rate;
+        metrics->rx_utilization = (rx_rate / max_bandwidth_kb) * 100.0;
+        metrics->tx_utilization = (tx_rate / max_bandwidth_kb) * 100.0;
+        metrics->total_rx += rx_bytes;
+        metrics->total_tx += tx_bytes;
+
         prev_stats[interface_count].rx_bytes = rx_bytes;
         prev_stats[interface_count].tx_bytes = tx_bytes;
         prev_stats[interface_count].last_update = now;
 
         interface_count++;
+        break; // Only track primary interface for now
     }
  
     fclose(file);

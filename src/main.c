@@ -42,53 +42,84 @@ static int initialize_signal_handlers(void)
 }
 
 // Core initialization of all subsystems
-static int initialize_subsystems(void)
+bool initialize_subsystems(void)
 {
-    if (!error_handler_init("sysmon_error.log")) {
+    if (!error_handler_init("sysmon_error.log")) { 
         log_error("Failed to initialize error handling system");
-        return 0;
+        return false;
     }
 
     const struct {
-        int (*init_func)(void);
+        bool (*init_func)(void);
         const char *name;
     } subsystems[] = {
-        {cpu_collector_init, "CPU collector"},
-        {memory_collector_init, "Memory collector"},
-        {network_collector_init, "Network collector"},
-        {disk_collector_init, "Disk collector"},
-        {process_collector_init, "Process collector"},
-        {ui_init, "UI manager"}
+        {(bool(*)(void))cpu_collector_init, "CPU collector"},
+        {(bool(*)(void))memory_collector_init, "Memory collector"},
+        {(bool(*)(void))network_collector_init, "Network collector"},
+        {(bool(*)(void))disk_collector_init, "Disk collector"},
+        {(bool(*)(void))process_collector_init, "Process collector"},
+        {(bool(*)(void))ui_init, "UI manager"}
     };
 
     for (size_t i = 0; i < sizeof(subsystems)/sizeof(subsystems[0]); i++) {
         if (!subsystems[i].init_func()) {
             log_error("%s initialization failed", subsystems[i].name);
-            return 0;
+            return false;
         }
     }
 
-    return 1;
+    return true;
 }
 
 // Collect and display metrics
 static void collect_and_display_metrics(void)
 {
+    cpu_metrics_t cpu_metrics;
+    memory_metrics_t memory_metrics;
+    network_metrics_t network_metrics;
+    disk_metrics_t disk_metrics;
+    process_metrics_t process_metrics;
+
     struct {
-        int (*collect)(void*);
+        bool (*collect)(void*);
         void (*update)(const void*);
         void *data;
         const char *name;
     } collectors[] = {
-        {cpu_collector_collect, ui_update_cpu, NULL, "CPU"},
-        {memory_collector_collect, ui_update_memory, NULL, "Memory"},
-        {network_collector_collect, ui_update_network, NULL, "Network"},
-        {disk_collector_collect, ui_update_disk, NULL, "Disk"},
-        {process_collector_collect, ui_update_processes, NULL, "Process"}
+        {
+            .collect = (bool(*)(void*))cpu_collector_collect,
+            .update = (void(*)(const void*))ui_update_cpu,
+            .data = &cpu_metrics,
+            .name = "CPU"
+        },
+        {
+            .collect = (bool(*)(void*))memory_collector_collect,
+            .update = (void(*)(const void*))ui_update_memory,
+            .data = &memory_metrics,
+            .name = "Memory"
+        },
+        {
+            .collect = (bool(*)(void*))network_collector_collect,
+            .update = (void(*)(const void*))ui_update_network,
+            .data = &network_metrics,
+            .name = "Network"
+        },
+        {
+            .collect = (bool(*)(void*))disk_collector_collect,
+            .update = (void(*)(const void*))ui_update_disk,
+            .data = &disk_metrics,
+            .name = "Disk"
+        },
+        {
+            .collect = (bool(*)(void*))process_collector_collect,
+            .update = (void(*)(const void*))ui_update_processes,
+            .data = &process_metrics,
+            .name = "Process"
+        }
     };
 
     for (size_t i = 0; i < sizeof(collectors)/sizeof(collectors[0]); i++) {
-        if (collectors[i].collect && !(collectors[i].collect)(collectors[i].data)) {
+        if (!collectors[i].collect(collectors[i].data)) {
             log_error("%s data collection failed", collectors[i].name);
             continue;
         }
@@ -116,7 +147,7 @@ static void main_loop(void)
         }
 
         ui_handle_input();
-        usleep(10000); // 10ms sleep to reduce CPU usage
+        sleep(0.1); // 10ms sleep to reduce CPU usage
     }
 }
 

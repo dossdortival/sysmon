@@ -85,19 +85,29 @@ typedef struct {
 /**
  * @brief Process information structure
  */
+typedef struct {
+    int pid;                            // Process ID
+    char name[MAX_PROC_NAME];           // Process name
+    double cpu_usage;                   // CPU usage percentage
+    double mem_usage;                   // Memory usage percentage
+    unsigned long mem_used;             // Memory used (KB)
+} process_info_t;
+
 /**
  * @brief Process metrics structure
  */
 typedef struct {
-    struct {
-        int pid;                       // Process ID
-        char name[MAX_PROC_NAME];       // Process name
-        double cpu_usage;              // CPU usage percentage
-        double mem_usage;              // Memory usage percentage
-        unsigned long mem_used;        // Memory used (KB)
-    } processes[MAX_PROCESSES];        // Array of process info
-    
-    int count;                         // Number of processes
+    process_info_t processes[MAX_PROCESSES];  // Array of process info
+    int count;                               // Number of processes
 } process_metrics_t;
+
+// Log levels for util functions
+typedef enum {
+    LOG_DEBUG,
+    LOG_INFO, 
+    LOG_WARNING,
+    LOG_ERROR,
+    LOG_FATAL
+} log_level_t;
 
 #endif /* SYSMON_H */

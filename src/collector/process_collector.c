@@ -25,13 +25,7 @@ static unsigned long long prev_work_jiffies = 0;
   * @param process Pointer to process structure to populate
   * @return true if successful, false otherwise
   */
-static bool read_process_stat(pid_t pid, struct {
-    int pid;
-    char name[MAX_PROC_NAME];
-    double cpu_usage;
-    double mem_usage;
-    unsigned long mem_used;
-} *process) 
+static bool read_process_stat(pid_t pid, process_info_t *process) 
 {
     char stat_path[64];
     snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", pid);

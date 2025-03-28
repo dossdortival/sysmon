@@ -56,7 +56,7 @@ static bool read_global_disk_stats(disk_metrics_t *metrics)
         unsigned long reads, writes;
         
         // Format: major minor name reads sectors_read writes sectors_written
-        if (sscanf(line, "%*d %*d %*s %lu %*lu %lu %*lu", &reads, &writes) == 2) {
+        if (sscanf(line, "%*d %*d %*s %lu %*u %lu %*u", &reads, &writes) == 2) {
             total_read += reads;
             total_write += writes;
         }
