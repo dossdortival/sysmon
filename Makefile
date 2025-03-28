@@ -2,7 +2,7 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -g -O2
+CFLAGS = -Wall -Wextra -g -O2 -I$(SRC_DIR)/include 
 LDFLAGS = -lncurses -lm
 
 # Directories
@@ -12,10 +12,14 @@ BIN_DIR = bin
 
 # Source files
 SRCS = $(SRC_DIR)/main.c \
-       $(SRC_DIR)/collector/cpu_collector.c \
+       $(SRC_DIR)/collector/cpu_collector.c \q
        $(SRC_DIR)/collector/memory_collector.c \
+       $(SRC_DIR)/collector/network_collector.c \
+       $(SRC_DIR)/collector/disk_collector.c \
+       $(SRC_DIR)/collector/process_collector.c \
        $(SRC_DIR)/ui/ui_manager.c \
-       $(SRC_DIR)/util/error_handler.c
+       $(SRC_DIR)/util/error_handler.c \
+       $(SRC_DIR)/util/logger.c
 
 # Object files
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
@@ -53,9 +57,15 @@ run: all
 install: all
 	mkdir -p $(DESTDIR)/usr/local/bin
 	cp $(TARGET) $(DESTDIR)/usr/local/bin/sysmon
+	@echo "sysmon installed successfully to $(DESTDIR)/usr/local/bin"
 
 # Uninstall from system
 uninstall:
 	rm -f $(DESTDIR)/usr/local/bin/sysmon
+	@echo "sysmon uninstalled successfully"
 
-.PHONY: all clean run install uninstall directories
+# Format the code
+format:
+	find $(SRC_DIR) -name '*.c' -o -name '*.h' | xargs clang-format -i -style=file
+
+.PHONY: all clean run install uninstall directories format
