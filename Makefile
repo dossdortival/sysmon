@@ -12,7 +12,7 @@ BIN_DIR = bin
 
 # Source files
 SRCS = $(SRC_DIR)/main.c \
-       $(SRC_DIR)/collector/cpu_collector.c \q
+       $(SRC_DIR)/collector/cpu_collector.c \
        $(SRC_DIR)/collector/memory_collector.c \
        $(SRC_DIR)/collector/network_collector.c \
        $(SRC_DIR)/collector/disk_collector.c \
