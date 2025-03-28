@@ -3,6 +3,7 @@ sysmon
 *.o
 *.out
 *.exe
+*.log
 
 # Ignore backup or temp files
 *.swp
