@@ -70,6 +70,8 @@ typedef struct {
     double tx_utilization;              // Upload utilization percentage
     unsigned long total_rx;             // Total bytes received
     unsigned long total_tx;             // Total bytes transmitted
+    unsigned long rx_bytes;             // Bytes received since last check
+    unsigned long tx_bytes;             // Bytes transmitted since last check
 } network_metrics_t;
 
 /**

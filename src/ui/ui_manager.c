@@ -4,6 +4,7 @@
  * ui_manager.c - User interface management implementation
  */
 
+#define _POSIX_C_SOURCE 200809L
 #include <ncurses.h>
 #include <string.h>
 #include <stdlib.h>
@@ -146,7 +147,7 @@ bool ui_init(void)
         !init_window(&ui.memory, 7, 10, "Memory Usage") ||
         !init_window(&ui.network, 7, 17, "Network Activity") ||
         !init_window(&ui.disk, 7, 24, "Disk I/O") ||
-        !init_window(&ui.processes, ui.dim.max_y - 13, 31, "Processes") || 
+        !init_window(&ui.processes, 13, 31, "Processes") || 
         !init_window(&ui.footer, 3, ui.dim.max_y - 3, NULL)) {
         ui_cleanup();
         return false;
@@ -191,9 +192,7 @@ void ui_update_cpu(const cpu_metrics_t *metrics)
 
         mvwprintw(ui.cpu.win, 3 + row, x_pos, "CPU%d: %5.1f%%", 
                  i, metrics->core_usage[i]);
-        draw_progress_bar(ui.cpu.win, 3 + row, x_pos + 12, metrics->core_usage[i],
-                         get_usage_color(metrics->core_usage[i]));
-    }
+    } 
 }
 
 // Update memory metrics display
@@ -230,8 +229,7 @@ void ui_update_memory(const memory_metrics_t *metrics)
 }
 
 // Update network metrics display
-void ui_update_network(const network_metrics_t *metrics) 
-{
+void ui_update_network(const network_metrics_t *metrics) {
     if (!metrics || !ui.network.win) return;
 
     werase(ui.network.win);
@@ -241,13 +239,13 @@ void ui_update_network(const network_metrics_t *metrics)
     // Display primary interface stats
     mvwprintw(ui.network.win, 1, 2, "Interface: %-10s", metrics->interface);
     
-    // Display transfer rates
-    mvwprintw(ui.network.win, 2, 2, "Download: %6.1f KB/s", metrics->rx_rate);
-    mvwprintw(ui.network.win, 3, 2, "Upload:   %6.1f KB/s", metrics->tx_rate);
+    // Display transfer rates with better formatting
+    mvwprintw(ui.network.win, 2, 2, "Download: %8.2f KB/s", metrics->rx_rate);
+    mvwprintw(ui.network.win, 3, 2, "Upload:   %8.2f KB/s", metrics->tx_rate);
 
-    // Display totals (convert to MB)
-    mvwprintw(ui.network.win, 5, 2, "Total: ↓%-6.1f MB ↑%-6.1f MB", 
-             metrics->total_rx/1024.0, metrics->total_tx/1024.0);
+    // Display totals with ASCII arrows instead of Unicode
+    mvwprintw(ui.network.win, 5, 2, "Total RX: %8.1f MB", metrics->total_rx/1024.0);
+    mvwprintw(ui.network.win, 6, 2, "Total TX: %8.1f MB", metrics->total_tx/1024.0);
 }
 
 // Update disk metrics display
@@ -279,27 +277,32 @@ void ui_update_disk(const disk_metrics_t *metrics)
 // Update process metrics display
 void ui_update_processes(const process_metrics_t *metrics)
 {
-    if (!metrics || !ui.processes.win || metrics->count <= 0) return;
+    if (!metrics || !ui.processes.win) return;
 
     werase(ui.processes.win);
     box(ui.processes.win, 0, 0);
     mvwprintw(ui.processes.win, 0, 2, " Processes ");
 
-    // Display header
-    mvwprintw(ui.processes.win, 1, 2, "%-6s %6s %6s %s", 
+    if (metrics->count == 0) {
+        mvwprintw(ui.processes.win, 1, 2, "No processes found");
+        return;
+    }
+
+    // Header
+    mvwprintw(ui.processes.win, 1, 2, "%-6s %6s %6s %-20s", 
              "PID", "CPU%", "MEM%", "NAME");
 
-    // Display processes
+    // Display first N processes that fit
     int max_rows = ui.processes.height - 3;
     int to_show = metrics->count > max_rows ? max_rows : metrics->count;
 
     for (int i = 0; i < to_show; i++) {
         const process_info_t *p = &metrics->processes[i];
-        mvwprintw(ui.processes.win, 2+i, 2, "%-6d %6.1f %6.1f %s",
+        mvwprintw(ui.processes.win, 2+i, 2, "%-6d %6.1f %6.1f %-20s",
                  p->pid, p->cpu_usage, p->mem_usage, p->name);
-    } 
+    }
 }
- 
+
 // Handle user input
 void ui_handle_input(void) 
 {
@@ -333,4 +336,67 @@ void ui_cleanup(void)
     if (ui.processes.win) delwin(ui.processes.win);
     if (ui.footer.win) delwin(ui.footer.win);
     endwin();
+}
+
+// Handle window resize events
+void ui_handle_resize(void)
+{
+    // Block SIGWINCH during resize
+    sigset_t mask, oldmask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGWINCH);
+    sigprocmask(SIG_BLOCK, &mask, &oldmask);
+
+    // Reinitialize ncurses to handle resizing
+    endwin();
+    refresh();
+
+    // Update terminal dimensions
+    getmaxyx(stdscr, ui.dim.max_y, ui.dim.max_x);
+    if (ui.dim.max_y <= 0 || ui.dim.max_x <= 0) {
+        log_error("Invalid terminal dimensions: %d x %d", ui.dim.max_y, ui.dim.max_x);
+        sigprocmask(SIG_UNBLOCK, &mask, NULL);
+        return;
+    }
+    ui.dim.bar_width = ui.dim.max_x - 4;
+
+    // Log the new dimensions for debugging
+    log_info("Resizing UI: new dimensions = %d x %d", ui.dim.max_y, ui.dim.max_x);
+
+    // Delete old windows
+    if (ui.header.win) delwin(ui.header.win);
+    if (ui.cpu.win) delwin(ui.cpu.win);
+    if (ui.memory.win) delwin(ui.memory.win);
+    if (ui.network.win) delwin(ui.network.win);
+    if (ui.disk.win) delwin(ui.disk.win);
+    if (ui.processes.win) delwin(ui.processes.win);
+    if (ui.footer.win) delwin(ui.footer.win);
+
+    // Recreate windows with updated dimensions
+    if (!init_window(&ui.header, 3, 0, NULL) ||
+        !init_window(&ui.cpu, 7, 3, "CPU Usage") ||
+        !init_window(&ui.memory, 7, 10, "Memory Usage") ||
+        !init_window(&ui.network, 7, 17, "Network Activity") ||
+        !init_window(&ui.disk, 7, 24, "Disk I/O") ||
+        !init_window(&ui.processes, 13, 31, "Processes") || 
+        !init_window(&ui.footer, 3, ui.dim.max_y - 3, NULL)) {
+        log_error("Failed to resize UI");
+        sigprocmask(SIG_UNBLOCK, &mask, NULL);
+        return;
+    }
+
+    // Redraw header and footer
+    wattron(ui.header.win, ui.attr.header);
+    mvwprintw(ui.header.win, 1, (ui.dim.max_x - 15) / 2, "sysmon v%s", SYSMON_VERSION);
+    wattroff(ui.header.win, ui.attr.header);
+
+    wattron(ui.footer.win, ui.attr.header);
+    mvwprintw(ui.footer.win, 1, 2, "q: Quit");
+    wattroff(ui.footer.win, ui.attr.header);
+
+    // Refresh the UI
+    ui_refresh();
+
+    // Unblock SIGWINCH
+    sigprocmask(SIG_UNBLOCK, &mask, NULL);
 }

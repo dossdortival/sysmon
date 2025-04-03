@@ -27,6 +27,9 @@ void ui_update_disk(const disk_metrics_t *metrics);
 // Update process display
 void ui_update_processes(const process_metrics_t *metrics);
 
+// window resize handler
+void ui_handle_resize(void);
+
 // Handle user input
 void ui_handle_input(void);
 
