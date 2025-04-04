@@ -8,6 +8,7 @@
 #define SYSMON_H
 
 #include <stdbool.h>
+#include <sys/types.h>
 
 // =============================================
 // System Configuration Constants
@@ -17,7 +18,7 @@
 #define MAX_PROC_NAME 256  // Maximum length for process names
 #define MAX_ERROR_MSG 1024  // Maximum length for error messages
 #define UI_REFRESH_RATE 1.0  // UI refresh rate in seconds
-#define MAX_PROCESSES 1024   // Maximum number of processes
+#define MAX_PROCESSES 100   // Maximum number of processes
 
 // Application version
 #define SYSMON_VERSION_MAJOR     0
@@ -88,11 +89,13 @@ typedef struct {
  * @brief Process information structure
  */
 typedef struct {
-    int pid;                            // Process ID
+    pid_t pid;                          // Process ID
     char name[MAX_PROC_NAME];           // Process name
     double cpu_usage;                   // CPU usage percentage
     double mem_usage;                   // Memory usage percentage
     unsigned long mem_used;             // Memory used (KB)
+    unsigned long long last_utime;      // Previous user time
+    unsigned long long last_stime;      // Previous system time
 } process_info_t;
 
 /**

@@ -9,7 +9,7 @@
 
 #include "../include/sysmon.h"
 
-#define MAX_PROCESSES 1024
+#define MAX_PROCESSES 100
 
 // Initialize process collector
 bool process_collector_init(void);
