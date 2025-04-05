@@ -19,17 +19,21 @@
  #include "util/logger.h"
  
 // Global flag for graceful shutdown
+static volatile sig_atomic_t g_resize_requested = 0;
 static volatile sig_atomic_t g_shutdown_requested = 0;
 
 static void handle_signal(int signal_number)
 {
-    (void)signal_number; // Unused parameter
-    g_shutdown_requested = 1;
+    if (signal_number == SIGWINCH) {
+        g_resize_requested = 1; // Set resize flag
+    } else {
+        g_shutdown_requested = 1;
+    }
 }
 
 static int initialize_signal_handlers(void)
 {
-    const int signals[] = {SIGINT, SIGTERM};
+    const int signals[] = {SIGINT, SIGTERM, SIGWINCH};
     const size_t num_signals = sizeof(signals) / sizeof(signals[0]);
     
     for (size_t i = 0; i < num_signals; i++) {
@@ -139,6 +143,11 @@ static void main_loop(void)
 
         double time_diff = (current_time.tv_sec - last_update.tv_sec) + 
                          (current_time.tv_nsec - last_update.tv_nsec) / 1e9;
+        
+        if (g_resize_requested) {
+            g_resize_requested = 0;
+            ui_handle_resize();
+        }
 
         if (time_diff >= 1.0) {
             collect_and_display_metrics();
@@ -147,7 +156,7 @@ static void main_loop(void)
         }
 
         ui_handle_input();
-        sleep(0.1); // 10ms sleep to reduce CPU usage
+        sleep(1); // 1s sleep to reduce CPU usage
     }
 }
 
