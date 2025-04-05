@@ -275,8 +275,7 @@ void ui_update_disk(const disk_metrics_t *metrics)
 }
 
 // Update process metrics display
-void ui_update_processes(const process_metrics_t *metrics)
-{
+void ui_update_processes(const process_metrics_t *metrics) {
     if (!metrics || !ui.processes.win) return;
 
     werase(ui.processes.win);
@@ -284,22 +283,43 @@ void ui_update_processes(const process_metrics_t *metrics)
     mvwprintw(ui.processes.win, 0, 2, " Processes ");
 
     if (metrics->count == 0) {
-        mvwprintw(ui.processes.win, 1, 2, "No processes found");
+        mvwprintw(ui.processes.win, 1, 2, "No active processes");
         return;
     }
 
     // Header
-    mvwprintw(ui.processes.win, 1, 2, "%-6s %6s %6s %-20s", 
+    mvwprintw(ui.processes.win, 1, 2, "%-6s %6s %6s %-20s",
              "PID", "CPU%", "MEM%", "NAME");
 
-    // Display first N processes that fit
     int max_rows = ui.processes.height - 3;
     int to_show = metrics->count > max_rows ? max_rows : metrics->count;
+    int row = 2;
 
+    // Show active processes first (CPU% > 0)
     for (int i = 0; i < to_show; i++) {
-        const process_info_t *p = &metrics->processes[i];
-        mvwprintw(ui.processes.win, 2+i, 2, "%-6d %6.1f %6.1f %-20s",
-                 p->pid, p->cpu_usage, p->mem_usage, p->name);
+        if (metrics->processes[i].cpu_usage > 0.1) {  // Threshold
+            mvwprintw(ui.processes.win, row++, 2, "%-6d %6.1f %6.1f %-20s",
+                     metrics->processes[i].pid,
+                     metrics->processes[i].cpu_usage,
+                     metrics->processes[i].mem_usage,
+                     metrics->processes[i].name);
+        }
+    }
+
+    // Separator if we have both active and idle
+    if (row > 2 && row < max_rows) {
+        mvwprintw(ui.processes.win, row++, 2, "--- Idle processes ---");
+    }
+
+    // Show idle processes
+    for (int i = 0; i < to_show && row < max_rows; i++) {
+        if (metrics->processes[i].cpu_usage <= 0.1) {
+            mvwprintw(ui.processes.win, row++, 2, "%-6d %6.1f %6.1f %-20s",
+                     metrics->processes[i].pid,
+                     metrics->processes[i].cpu_usage,
+                     metrics->processes[i].mem_usage,
+                     metrics->processes[i].name);
+        }
     }
 }
 
