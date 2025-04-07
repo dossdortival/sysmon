@@ -9,7 +9,7 @@
 
 #include "../include/sysmon.h"
 
-#define MAX_PROCESSES 100
+#define MAX_PROCESSES 1024  // Maximum number of processes to display
 
 // Initialize process collector
 bool process_collector_init(void);

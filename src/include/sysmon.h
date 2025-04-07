@@ -18,7 +18,7 @@
 #define MAX_PROC_NAME 256  // Maximum length for process names
 #define MAX_ERROR_MSG 1024  // Maximum length for error messages
 #define UI_REFRESH_RATE 1.0  // UI refresh rate in seconds
-#define MAX_PROCESSES 100   // Maximum number of processes
+#define MAX_PROCESSES 1024   // Maximum number of processes
 
 // Application version
 #define SYSMON_VERSION_MAJOR     0
