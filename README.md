@@ -34,29 +34,21 @@ A lightweight, ncurses-based system monitor (written in C) for Linux that provid
 - GCC or compatible C compiler
 - make
 
-## Building and Running
+## Installation From Source
 
-### Build
 ```bash
+git clone https://github.com/dossdortival/sysmon.git
+cd sysmon
 make
-```
-
-### Run
-```bash
-make run
-```
-or
-```bash
-bin/sysmon
-```
-
-### Install
-```bash
 sudo make install
 ```
 
 ## Usage
 
+- Quick Run
+```bash
+./bin/sysmon
+```
 - Press 'q' to quit the application
 
 ## Contributing
