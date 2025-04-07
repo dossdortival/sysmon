@@ -26,14 +26,20 @@ static int prev_process_count = 0;
 
 static bool is_kernel_thread(pid_t pid) {
     char stat_path[64];
-    snprintf(stat_path, sizeof(stat_path), "/proc/%d/cmdline", pid);
-    
+    snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", pid);
+
     FILE *fp = fopen(stat_path, "r");
-    if (!fp) return true;
-    
-    int ch = fgetc(fp);
+    if (!fp) return true;  // Assume kernel thread if file cannot be opened
+
+    char state;
+    if (fscanf(fp, "%*d %*s %c", &state) != 1) {
+        fclose(fp);
+        return true;  // Assume kernel thread if state cannot be read
+    }
     fclose(fp);
-    return ch == EOF;
+
+    // Kernel threads typically have state 'K'
+    return (state == 'K');
 }
 
 // Process-specific statistics from /proc/[pid]/stat
@@ -54,6 +60,7 @@ static bool read_process_stat(pid_t pid, process_info_t *process) {
                   "%lu %lu %*d %*d %*d %*d %*u %llu",
              name, &state, &utime, &stime, &starttime) != 5) {
         fclose(fp);
+        log_error("Failed to parse /proc/%d/stat", pid);
         return false;
     }
 

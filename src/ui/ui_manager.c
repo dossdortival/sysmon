@@ -297,7 +297,7 @@ void ui_update_processes(const process_metrics_t *metrics) {
 
     // Show active processes first (CPU% > 0)
     for (int i = 0; i < to_show; i++) {
-        if (metrics->processes[i].cpu_usage > 0.1) {  // Threshold
+        if (metrics->processes[i].cpu_usage >= 0.0) {  // Threshold
             mvwprintw(ui.processes.win, row++, 2, "%-6d %6.1f %6.1f %-20s",
                      metrics->processes[i].pid,
                      metrics->processes[i].cpu_usage,
