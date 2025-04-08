@@ -2,6 +2,54 @@
 
 A lightweight, ncurses-based system monitor (written in C) for Linux that provides real-time information about CPU, memory, network, disk, and processes while consuming minimal system resources.
 
+#### Video Demo:  https://www.youtube.com/watch?v=oO2lu8_9tVw
+
+#### Description:
+
+Modern Linux users and system administrators need a lightweight, efficient, and interactive tool to monitor real-time system performance (CPU, memory, network, disk, and process usage). Existing tools like htop and top are widely used, but they are either too complex, resource-intensive, lack customizability, or are not minimalistic enough for specific workflows.
+sysmon aims to solve this by providing a lightweight, ncurses-based system monitor that is both efficient and user-friendly while consuming minimal system resources.
+
+##### Use Cases & Acceptance Criteria
+- **Use Case 1**: Viewing System Performance
+   - As a system administrator,
+ I want to view CPU, memory, disk, and network usage in real-time,
+ so that I can monitor system health without running multiple commands.
+
+- **✅ Acceptance Criteria:**
+  - CPU, memory, disk, and network stats must update every second
+  - Data should be displayed in a structured and readable format
+  - UI should remain responsive without lag
+
+- **Use Case 2**: Monitoring Running Processes
+  - As a Linux user,
+ I want to see a list of active processes sorted by resource usage,
+ so that I can identify which processes are consuming the most CPU and memory.
+
+- **✅ Acceptance Criteria:**
+  - A table of processes should be displayed, showing PID, CPU%, MEM%, and Command
+  - Users can sort by CPU or memory usage
+  - The table should update dynamically without flickering
+
+- **Use Case 3**: Killing a Process
+  - As a developer,
+ I want to be able to kill an unresponsive process directly from sysmon,
+ so that I don’t have to manually find the PID and run kill in another terminal.
+
+- **✅ Acceptance Criteria:**
+  - Users can select a process and press k to kill it
+  - A confirmation prompt should appear before killing the process
+  - If successful, the process should disappear from the list; otherwise, an error message should be displayed
+
+- **Use Case 4**: Exiting the Application
+  - As a user,
+ I want to easily exit sysmon, so that I can return to my normal terminal usage.
+
+- **✅ Acceptance Criteria:**
+  - Pressing q should immediately quit the application
+  - UI should cleanly exit and restore the terminal to its original state
+
+sysmon provides a minimalistic, real-time, and interactive system monitoring experience for Linux users. With efficient resource handling, intuitive keyboard navigation, and real-time data updates, it ensures a smooth and informative monitoring experience. 
+
 ## Features
 
 ### Current Features:
